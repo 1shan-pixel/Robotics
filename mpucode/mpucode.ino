@@ -1,92 +1,136 @@
 #include <Wire.h> 
-#include <MPU6050_tockn.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <Arduino.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 
 // Constants (make them easier to adjust)
-const float FALL_THRESHOLD = 1.0; 
-const float ROTATION_THRESHOLD = 1.0; 
-const char* WIFI_SSID = "utsavghising_fbnpa_2.4";
-const char* WIFI_PASSWORD = "CLB264E64A";
 
+const char* WIFI_SSID = "";
+const char* WIFI_PASSWORD = "";
+
+float values[6];
 // Global objects
-MPU6050 mpu6050(Wire);
+Adafruit_MPU6050 mpu;
 HTTPClient http;
 
 void setup() {
+
   Serial.begin(115200);
+  while (!Serial)
+    delay(10); // will pause Zero, Leonardo, etc until serial console opens
 
-  Serial.println("Starting setup...");
+  Serial.println("MPU6050 test!");
 
-  // Initialize I2C communication
-  Wire.begin(21, 22); 
-  mpu6050.begin();
-  mpu6050.calcGyroOffsets(true);
+  // Try to initialize!
+  if (!mpu.begin()) {
+    Serial.println("Failed to find MPU6050 chip");
+    while (1) {
+      delay(10);
+    }
+  }
+  Serial.println("MPU6050 Found!");
+  
 
-  // Attempt Wi-Fi connection
+
+
+  //setupt motion detection
+  mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
+  mpu.setMotionDetectionThreshold(1);
+  mpu.setMotionDetectionDuration(20);
+  mpu.setInterruptPinLatch(true);	// Keep it latched.  Will turn off when reinitialized.
+  mpu.setInterruptPinPolarity(true);
+  mpu.setMotionInterrupt(true);
+  
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.println("Connecting to WiFi...");
+ 
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    delay(1000);
+    
   }
   Serial.println("Connected to WiFi");
   Serial.println(WiFi.localIP());
+
+
+ 
+
+ 
 }
 
 void loop() {
-  mpu6050.update();
+  String payload; // Declare payload here with wider scope
 
-  // Sensor readings
-  float accX = mpu6050.getAccX();
-  float accY = mpu6050.getAccY();
-  float accZ = mpu6050.getAccZ();
-  float gyroX = mpu6050.getGyroX();
-  float gyroY = mpu6050.getGyroY();
-  float gyroZ = mpu6050.getGyroZ();
+  if(mpu.getMotionInterruptStatus()) {
+    /* Get new sensor events with the readings */
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
 
-  // Calculate magnitude
-  float magnitude = sqrt(accX*accX + accY*accY + accZ*accZ);
-  unsigned long timestamp = millis();
+    /* Print out the values */
+    Serial.print("AccelX:");
+    Serial.print(a.acceleration.x);
+    Serial.print(",");
+    Serial.print("AccelY:");
+    Serial.print(a.acceleration.y);
+    Serial.print(",");
+    Serial.print("AccelZ:");
+    Serial.print(a.acceleration.z);
+    Serial.print(", ");
+    Serial.print("GyroX:");
+    Serial.print(g.gyro.x);
+    Serial.print(",");
+    Serial.print("GyroY:");
+    Serial.print(g.gyro.y);
+    Serial.print(",");
+    Serial.print("GyroZ:");
+    Serial.print(g.gyro.z);
+    Serial.println(" ");
 
-  // Print the data with labels and formatting
-  Serial.print("Timestamp: "); 
-  Serial.println(timestamp);
-  Serial.println("Acceleration (X, Y, Z): ");
-  Serial.println(accX);
-  Serial.println(accY);
-  Serial.println(accZ);
-  
-  // Serial.println("Gyroscope (X, Y, Z): ");
-  // Serial.println(gyroX);
-  // Serial.println(gyroY);
-  // Serial.println(gyroZ);
+    values[0] = a.acceleration.x;
+    values[1] = a.acceleration.y;
+    values[2] = a.acceleration.z;
+    values[3] = g.gyro.x;
+    values[4] = g.gyro.y;
+    values[5] = g.gyro.z;
 
-  delay(500);
-  // Fall detection
-  if (magnitude > FALL_THRESHOLD && abs(gyroX) > ROTATION_THRESHOLD) { 
-    Serial.print(magnitude);
-    Serial.println(" FALL DETECTED!");
-    // Add actions here: send an alert, trigger an alarm, etc.
+    payload = "{";
+    payload += "\"acc_x\": " + String(values[0]) + ",";
+    payload += "\"acc_y\": " + String(values[1]) + ",";
+    payload += "\"acc_z\": " + String(values[2]) + ",";
+    payload += "\"gyro_x\": " + String(values[3]) + ",";
+    payload += "\"gyro_y\": " + String(values[4]) + ",";
+    payload += "\"gyro_z\": " + String(values[5]); 
+    payload += "}";
+    Serial.println(payload);
+    sendFallDatatoServer(payload); 
+
   }
 
-  // Send data to server if Wi-Fi is connected
-  //sendFallDatatoServer(magnitude); 
+  // Sensor readings
+ 
+  
+  
+
+  
 }
 
-void sendFallDatatoServer(float magnitude) {
+void sendFallDatatoServer(String payload) {
+    Serial.print("hello");
   if (WiFi.status() == WL_CONNECTED) {
-    String payload = "{ \"magnitude\": " + String(magnitude) + "}"; 
 
-    http.begin("http://192.168.1.236:5000/data");
+    http.begin("http://192.168.1.71:5000/data");
     http.addHeader("Content-Type", "application/json"); 
 
     int httpResponseCode = http.POST(payload); 
     if (httpResponseCode == 200 ) {
       Serial.println("Data sent succesfully");
-      delay(10000);
+      
     } else {
-      delay(2000);
+      Serial.println(httpResponseCode);
+      Serial.println("no data sent");
+  
     }
 
     http.end(); 
@@ -95,4 +139,3 @@ void sendFallDatatoServer(float magnitude) {
   }
 }
 
-// tftt or fttf
