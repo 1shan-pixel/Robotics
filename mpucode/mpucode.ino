@@ -4,18 +4,11 @@
 #include <Arduino.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
-#include <WiFiManager.h> 
-#include <SPI.h>
-#include <MFRC522.h>
 
-
-// need to look at this later. 
-#define SS_PIN 5
-#define RST_PIN 22 
 // Constants (make them easier to adjust)
-MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance
 
-
+const char* WIFI_SSID = "Vagabond_2.4";
+const char* WIFI_PASSWORD = "Overkill";
 
 float values[6];
 // Global objects
@@ -27,12 +20,9 @@ void setup() {
   Serial.begin(115200);
   while (!Serial)
     delay(10); // will pause Zero, Leonardo, etc until serial console opens
-  
+
   Serial.println("MPU6050 test!");
-  WiFiManager wm; 
-  wm.resetSettings();
-  bool res;
-  res = wm.autoConnect("AutoConnectAP","password"); 
+
   // Try to initialize!
   if (!mpu.begin()) {
     Serial.println("Failed to find MPU6050 chip");
@@ -41,7 +31,6 @@ void setup() {
     }
   }
   Serial.println("MPU6050 Found!");
-  
   
 
 
@@ -54,19 +43,16 @@ void setup() {
   mpu.setInterruptPinPolarity(true);
   mpu.setMotionInterrupt(true);
   
-  while(!res){
-  Serial.println("Connecting to WiFi...");
-  Serial.print(".");
 
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("Connecting to WiFi...");
+ 
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    
   }
-  
- 
- 
   Serial.println("Connected to WiFi");
-  SPI.begin();          // Initiate SPI bus
-  mfrc522.PCD_Init();   // Initiate MFRC522
-  Serial.println("Place your card near the reader...");
-  Serial.println();
+  Serial.println(WiFi.localIP());
 
 
  
@@ -75,27 +61,7 @@ void setup() {
 }
 
 void loop() {
-  String payload; 
-   if (!mfrc522.PICC_IsNewCardPresent()) {
-    return;
-  }
-  // Select one of the cards
-  if (!mfrc522.PICC_ReadCardSerial()) {
-    return;
-  }
-  // Show UID on serial monitor
-  Serial.print("UID tag: ");
-  String content = "";
-  for (byte i = 0; i < mfrc522.uid.size; i++) {
-    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-    Serial.print(mfrc522.uid.uidByte[i], HEX);
-    content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-    content.concat(String(mfrc522.uid.uidByte[i], HEX));
-  }
-  Serial.println();
-  Serial.print("Message: ");
-  content.toUpperCase();
-  Serial.println(content);// Declare payload here with wider scope
+  String payload; // Declare payload here with wider scope
 
   if(mpu.getMotionInterruptStatus()) {
     /* Get new sensor events with the readings */
@@ -151,9 +117,10 @@ void loop() {
 }
 
 void sendFallDatatoServer(String payload) {
+    Serial.print("hello");
   if (WiFi.status() == WL_CONNECTED) {
 
-    http.begin("http://192.168.1.70:5000/data");
+    http.begin("http://192.168.1.71:5000/data");
     http.addHeader("Content-Type", "application/json"); 
 
     int httpResponseCode = http.POST(payload); 
@@ -171,4 +138,3 @@ void sendFallDatatoServer(String payload) {
     Serial.println("Error: Cannot send data without a WiFi connection.");
   }
 }
-
