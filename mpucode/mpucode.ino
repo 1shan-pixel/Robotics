@@ -4,11 +4,8 @@
 #include <Arduino.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <WiFiManager.h> 
 
-// Constants (make them easier to adjust)
-
-const char* WIFI_SSID = "Vagabond_2.4";
-const char* WIFI_PASSWORD = "Overkill";
 
 float values[6];
 // Global objects
@@ -20,9 +17,12 @@ void setup() {
   Serial.begin(115200);
   while (!Serial)
     delay(10); // will pause Zero, Leonardo, etc until serial console opens
-
+  
   Serial.println("MPU6050 test!");
-
+  WiFiManager wm; 
+  wm.resetSettings();
+  bool res;
+  res = wm.autoConnect("AutoConnectAP","password"); 
   // Try to initialize!
   if (!mpu.begin()) {
     Serial.println("Failed to find MPU6050 chip");
@@ -43,16 +43,16 @@ void setup() {
   mpu.setInterruptPinPolarity(true);
   mpu.setMotionInterrupt(true);
   
-
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while(!res){
   Serial.println("Connecting to WiFi...");
- 
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    
+  Serial.print(".");
+
   }
+  
+ 
+ 
   Serial.println("Connected to WiFi");
-  Serial.println(WiFi.localIP());
+  
 
 
  
@@ -117,10 +117,9 @@ void loop() {
 }
 
 void sendFallDatatoServer(String payload) {
-    Serial.print("hello");
   if (WiFi.status() == WL_CONNECTED) {
 
-    http.begin("http://192.168.1.71:5000/data");
+    http.begin("http://192.168.1.72:8000/api/v1/current-time");
     http.addHeader("Content-Type", "application/json"); 
 
     int httpResponseCode = http.POST(payload); 
