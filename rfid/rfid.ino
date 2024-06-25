@@ -6,7 +6,11 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <WiFiManager.h> 
+#include <Arduino.h>
 
+
+#define BUZZER_PIN 5 
 
 // Define stepper motor connections
 #define STEPPER_PULSE_PIN 14
@@ -17,26 +21,7 @@
 
 
 bool tag_scanned = false; 
-
-const char* current_time_from_server = R"({
-      "status": "success",
-      "message": "Current time",
-      "data": {
-          "hours": "00",
-          "minutes": "58",
-          "seconds": "32"
-      }
-  })";
-
-const char* reminder_data = R"({
-      
-    "status": "success",
-    "data": {
-        "hour": "06",
-        "minute": "00"
-    
-      }
-  })";
+String rfid_miss = "{\"type\" : \"missed\"}";
 
 //acessing time from server for syncing purposes or something
 int SERVER_HOUR = 0 ;
@@ -45,9 +30,9 @@ int SERVER_MINUTE = 0;
 const char* WIFI_SSID = "Vagabond_2.4";
 const char* WIFI_PASSWORD = "Overkill";
 HTTPClient http;
-String tag_payload = "";
+String tag_payload = "12345";
 
-const char* url = "http://192.168.1.72:8000/api/v1/";
+String url = "http://192.168.43.190:8000/api/v1/";
 
 
 bool medicine_missed = false; 
@@ -80,7 +65,11 @@ void setup() {
   // Start serial communication
   Serial.begin(115200);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFiManager wm; 
+  wm.resetSettings();
+  bool res;
+  res = wm.autoConnect("AutoConnectAP","password"); 
+
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     
@@ -135,7 +124,9 @@ void loop() {
   }  
   
   }
-   if (minutes == 5 || minutes == 30 || minutes == 1 || seconds == 15) {
+   if (minutes == 5 || minutes == 30|| seconds == 20 || seconds == 45) {
+    delay(1000);
+
     checkReminder();
   }
 
@@ -145,14 +136,7 @@ void loop() {
  
 
   // Stepper control
-  if (angle > 800) {
-    angle = 0;
-  }
-  int angleMovement = angle + angleIncrement;
-  
-  stepper.move(angleMovement);
-  stepper.runToPosition(); 
-  delay(1000);
+ 
 
   
 
@@ -174,6 +158,14 @@ void loop() {
 
   if (isNewCardDetected(rfid, nuidPICC)) {
     rfid_id_to_server();
+     if (angle > 800) {
+    angle = 0;
+  }
+  int angleMovement = angle + angleIncrement;
+  
+  stepper.move(angleMovement);
+  stepper.runToPosition(); 
+  delay(1000);
     
     Serial.println(F("A new card has been detected."));
 
@@ -189,6 +181,14 @@ void loop() {
     Serial.println();
   } else {
     check_rfid_tag();
+     if (angle > 800) {
+    angle = 0;
+  }
+  int angleMovement = angle + angleIncrement;
+  
+  stepper.move(angleMovement);
+  stepper.runToPosition(); 
+  delay(1000);
     Serial.println(F("Card read previously."));
   }
 
@@ -211,6 +211,9 @@ void printDec(byte *buffer, byte bufferSize) {
 }
 
 void rfid_id_to_server(){
+  digitalWrite(BUZZER_PIN, HIGH);  // Turn the buzzer on
+  delay(1000);                     // Keep the buzzer on for 1 second
+  digitalWrite(BUZZER_PIN, LOW);
  medicine_missed = false; 
  lcd.clear();
  lcd.setCursor(0,0);
@@ -259,6 +262,9 @@ void rfid_id_to_server(){
 }
 
  bool check_rfid_tag(){
+  digitalWrite(BUZZER_PIN, HIGH);  // Turn the buzzer on
+  delay(1000);                     // Keep the buzzer on for 1 second
+  digitalWrite(BUZZER_PIN, LOW);
   
   medicine_missed = false; 
   tag_scanned = false; 
@@ -340,14 +346,14 @@ void getServerTime() {
   String url_time = url + "current-time";
 
   if (WiFi.status() == WL_CONNECTED) {
-    //http.begin(url_time);
-    //int httpResponseCode = http.GET();
-    int httpResponseCode = 200; 
+    http.begin(url_time);
+    int httpResponseCode = http.GET();
+    
 
     if (httpResponseCode == 200 || true ) {
-    //  String response = http.getString();
-      StaticJsonDocument<200> doc;
-      deserializeJson(doc, current_time_from_server);
+      String response = http.getString();
+      DynamicJsonDocument  doc(256);
+      deserializeJson(doc, response);
 
       const char* hoursStr = doc["data"]["hours"];
       const char* minutesStr = doc["data"]["minutes"];
@@ -369,18 +375,18 @@ void getServerTime() {
 void checkReminder() {
   getServerTime(); // Fetch current server time
 
- // String url_reminders = SERVER_URL + "reminders/" + tag_payload; // Replace with actual user ID
+ String url_reminders = url + "reminders/" + tag_payload;
+ Serial.println(url_reminders); // Replace with actual user ID
 
   if (WiFi.status() == WL_CONNECTED) {
-    //http.begin(url_reminders);
+    http.begin(url_reminders);
 
-    // httpResponseCode = http.GET();
-    int httpResponseCode = 200; 
+    int httpResponseCode = http.GET();
+    
     if (httpResponseCode == 200 || true ) {
-     // String payload = http.getString();
-      StaticJsonDocument<200> doc;
-      //DynamicJsonDocument doc(256); //make dynamic later ok 
-      deserializeJson(doc, reminder_data);
+      String response = http.getString();
+      DynamicJsonDocument doc(256); //make dynamic later ok 
+      deserializeJson(doc, response);
 
       const char* hoursStr = doc["data"]["hour"];
       const char* minutesStr = doc["data"]["minute"];
@@ -390,7 +396,7 @@ void checkReminder() {
   
      // need to remove later just for testing now
       // Compare reminder time with current server time
-      Serial.println(tag_scanned);
+      
       if (SERVER_HOUR > reminderHour || (SERVER_HOUR == reminderHour && SERVER_MINUTE > reminderMinute) || !tag_scanned) {
           medicine_missed = true; 
 
@@ -423,6 +429,25 @@ void sendNotification(){
 
   lcd.setCursor(0, 1);
   lcd.print("Status : Missed");
-  Serial.println("Hey you have missed your medication buddy");
+   // Trigger buzzer
+  
 
+ if (WiFi.status() == WL_CONNECTED) {
+          http.begin("http://192.168.95.242:8000/api/v1/notifications/12345");
+          http.addHeader("Content-Type", "application/json");
+
+          int httpResponseCode = http.POST(rfid_miss);
+          if (httpResponseCode >  200) {
+              Serial.println("Data sent successfully");
+
+          } else {
+              Serial.println(httpResponseCode);
+              Serial.println("No data sent");
+          }
+
+          http.end();
+      }
+      else {
+          Serial.println("Error: Cannot send data without a WiFi connection.");
+      }
 }
