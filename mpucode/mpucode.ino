@@ -11,7 +11,7 @@ float values[6];
 // Global objects
 Adafruit_MPU6050 mpu;
 HTTPClient http;
-
+String url = "http://192.168.43.190:8000/api/v1/notifications/12345";
 void setup() {
     Serial.begin(115200);
     while (!Serial)
@@ -96,7 +96,7 @@ void loop() {
 
 void sendFallDatatoServer(String payload) {
       if (WiFi.status() == WL_CONNECTED) {
-          http.begin("http://192.168.43.190:8000/api/v1/notifications/12345");
+          http.begin(url);
           http.addHeader("Content-Type", "application/json");
 
           int httpResponseCode = http.POST(payload);
